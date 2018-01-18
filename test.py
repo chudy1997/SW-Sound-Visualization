@@ -10,7 +10,7 @@ CHUNK = 2**11
 RATE = 44100
 
 p=pyaudio.PyAudio()
-stream=p.open(format=pyaudio.paInt16,channels=1,rate=RATE,input=True,
+stream=p.open(format=pyaudio.paInt16,channels=2,rate=RATE,input=True,
               frames_per_buffer=CHUNK)
 
 def Pitch(signal):
@@ -22,7 +22,7 @@ def Pitch(signal):
 
 WIDTH = 640
 HEIGHT = 480
-LIMIT = 16
+LIMIT = 201
 
 pygame.init()
 screen = pygame.display.set_mode([WIDTH, HEIGHT])
@@ -32,6 +32,22 @@ screen.blit(surf, (0, 0))
 random.seed()
 
 circles = []
+
+factors = []
+
+def update_factors(tab):
+    i = 0
+    k = 0
+    j = len(tab)-1
+    while (i < j):
+        tab[i] = tab[j] = k
+        k = k + 2 / len(tab)
+        i = i + 1
+        j = j - 1
+    if (i == j):
+        tab[i] = 1
+
+
 
 def getcolor(freq):
     if 668 <= freq:
@@ -61,14 +77,18 @@ while (1): #go for a few seconds
     peak=np.average(np.abs(data))*2
     c = int(Pitch(stream.read(CHUNK)))
     col = pygame.Color(getcolor(c)[0], getcolor(c)[1], getcolor(c)[2])
-    if (len(circles)>LIMIT):
+    if (len(circles)>=LIMIT):
         circles.pop(0)
+    else :
+        factors.append(0)
+        update_factors(factors)
     circles.append([screen, col, (surf.get_width()/2, surf.get_height()/2), int(500*abs(peak)/2**16)])
+
     surfaces = []
     for i in range(len(circles)):
         s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        circles[i][1].a = 255 * i/len(circles)
-        pygame.draw.circle(s, circles[i][1],circles[i][2],circles[i][3], 1)
+        circles[i][1].a = 255 * factors[i]
+        pygame.draw.circle(s, circles[i][1],circles[i][2],int(circles[i][3] * factors[i]), int(min(circles[i][3] * factors[i], 1)))
         surfaces.append(s)
 
     for i in range(len(surfaces)):
