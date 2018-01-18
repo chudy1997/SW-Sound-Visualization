@@ -4,14 +4,20 @@ import pygame
 import random
 import math
 import time
+import struct
 from matplotlib.mlab import find
 
 CHUNK = 2**11
 RATE = 44100
+FORMAT = pyaudio.paInt16
+SAMPLE_SIZE = 2
+nFFT = 512
 
 p=pyaudio.PyAudio()
 stream=p.open(format=pyaudio.paInt16,channels=2,rate=RATE,input=True,
               frames_per_buffer=CHUNK)
+
+MAX_y = 2.0** (p.get_sample_size(FORMAT) * 8 -1)
 
 def Pitch(signal):
     signal = np.fromstring(signal, 'Int16');
@@ -19,6 +25,40 @@ def Pitch(signal):
     index = find(np.diff(crossing));
     f0=round(len(index) *RATE /(2*np.prod(len(signal))))
     return f0;
+
+
+def get_freq(signal):
+    y = np.array(struct.unpack("%dh" % (len(signal)/SAMPLE_SIZE), signal)) / MAX_y
+    y_L = y[::2]
+    y_R = y[1::2]
+
+    Y_L = np.fft.fft(y_L, nFFT)
+    Y_R = np.fft.fft(y_R, nFFT)
+
+    Y = abs(np.hstack((Y_L[-nFFT / 2:-1], Y_R[:nFFT/2])))
+    #print (RATE/2 * np.argmax(Y) / len(Y), "x")
+    avg_freq = 0.0
+    divisor = 0.0
+    for x in range(len(Y_L)):
+        avg_freq += abs(Y_L[x] * (RATE / 2) * x / len(Y_L))
+        divisor += abs(Y_L[x])
+
+    for x in range(len(Y_R)):
+        avg_freq += abs(Y_R[x] * (RATE / 2) * x / len(Y_R))
+        divisor += abs(Y_R[x])
+
+    #print avg_freq
+
+    #avg_freq /= divisor
+
+    #print avg_freq, divisor
+    #return avg_freq
+    print (RATE/2.0) * (abs(np.argmax(Y) - len(Y)/2.0)) / (len(Y)/2.0)
+    return (RATE/2.0) * (abs(np.argmax(Y) - len(Y)/2.0)) / (len(Y)/2.0)
+    #print (abs(RATE/2 * np.argmax(Y_L) / len(Y_L)) + abs(RATE/2 * np.argmax(Y_R) / len(Y_R)))/2
+    #print "x"
+    #return (abs(RATE/2 * np.argmax(Y_L) / len(Y_L)) + abs(RATE/2 * np.argmax(Y_R) / len(Y_R)))/2
+#    return np.max(Y)
 
 WIDTH = 640
 HEIGHT = 480
@@ -73,9 +113,11 @@ while (1): #go for a few seconds
     #time.sleep(1/30)
     surf.fill(pygame.Color("black"))
     screen.blit(surf, (0,0))
-    data = np.fromstring(stream.read(CHUNK),dtype=np.int16)
+    rawdata = stream.read(CHUNK)
+    data = np.fromstring(rawdata,dtype=np.int16)
     peak=np.average(np.abs(data))*2
-    c = int(Pitch(stream.read(CHUNK)))
+    #c = int(Pitch(rawdata))
+    c = int(get_freq(rawdata))
     col = pygame.Color(getcolor(c)[0], getcolor(c)[1], getcolor(c)[2])
     if (len(circles)>=LIMIT):
         circles.pop(0)
@@ -94,10 +136,10 @@ while (1): #go for a few seconds
     for i in range(len(surfaces)):
         screen.blit(surfaces[i], (0,0))
 
-    print len(circles)
+    #print len(circles)
     pygame.display.flip()
     bars="#"*int(50*peak/2**16)
-    print("%05d %s"%(peak,bars))
+    #print("%05d %s"%(peak,bars))
 
 
 stream.stop_stream()
