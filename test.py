@@ -22,7 +22,7 @@ def Pitch(signal):
 
 WIDTH = 640
 HEIGHT = 480
-LIMIT = 201
+LIMIT = 51
 
 pygame.init()
 screen = pygame.display.set_mode([WIDTH, HEIGHT])
@@ -70,7 +70,7 @@ def getcolor(freq):
 
 
 while (1): #go for a few seconds
-    time.sleep(1/30)
+    #time.sleep(1/30)
     surf.fill(pygame.Color("black"))
     screen.blit(surf, (0,0))
     data = np.fromstring(stream.read(CHUNK),dtype=np.int16)
@@ -87,7 +87,7 @@ while (1): #go for a few seconds
     surfaces = []
     for i in range(len(circles)):
         s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        circles[i][1].a = 255 * factors[i]
+        #circles[i][1].a = 255 * factors[i]
         pygame.draw.circle(s, circles[i][1],circles[i][2],int(circles[i][3] * factors[i]), int(min(circles[i][3] * factors[i], 1)))
         surfaces.append(s)
 
