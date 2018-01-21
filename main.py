@@ -1,100 +1,147 @@
-import pyaudio as pya
-import numpy as np
-import time
-import math
-import struct
-import pygame
 import random
-from matplotlib.mlab import find
+import struct
+import sys
 
-CHUNK = 2048 # number of data points to read at a time
-RATE = 44100# time resolution of the recording device (Hz)
-WIDTH = 640
-HEIGHT = 480
-LIMIT = 10
+import numpy as np
+import pyaudio
+import pygame
+import time
+
+CHUNK = 2 ** 11
+RATE = 44100
+FORMAT = pyaudio.paInt16
+SAMPLE_SIZE = 2
+nFFT = 512
+WIDTH = 960
+HEIGHT = 720
+LIMIT = 30
+CHANNELS = 1
+CONSTANCE = 700
+
+
+def get_color(freq):
+    if 700 <= freq:
+        return (176, 9, 176)
+    elif 600 <= freq:
+        return (21, 101, 176)
+    elif 500 <= freq:
+        return (57, 219, 212)
+    elif 400 <= freq:
+        return (43, 240, 20)
+    elif 300 <= freq:
+        return (255, 243, 16)
+    elif 200 <= freq:
+        return (255, 171, 12)
+    elif 100 <= freq:
+        return (255, 27, 5)
+    else:
+        return (232, 232, 212)
+
+
+def get_freq(signal, max_y):
+    y = np.array(struct.unpack("%dh" % (len(signal) / SAMPLE_SIZE), signal)) / max_y
+    y_L = y[::2]
+    y_R = y[1::2]
+
+    Y_L = np.fft.fft(y_L, nFFT)
+    Y_R = np.fft.fft(y_R, nFFT)
+
+    Y = abs(np.hstack((Y_L[int(-nFFT / 2):-1], Y_R[:int(nFFT / 2)])))
+    avg_freq = 0.0
+    divisor = 0.0
+    for x in range(len(Y_L)):
+        avg_freq += abs(Y_L[x] * (RATE / 2) * x / len(Y_L))
+        divisor += abs(Y_L[x])
+
+    for x in range(len(Y_R)):
+        avg_freq += abs(Y_R[x] * (RATE / 2) * x / len(Y_R))
+        divisor += abs(Y_R[x])
+
+    return (RATE / 2.0) * (abs(np.argmax(Y) - len(Y) / 2.0)) / (len(Y) / 2.0)
+
+
+def update_factors(tab):
+    i = 0
+    k = 0
+    j = len(tab) - 1
+    while i < j:
+        tab[i] = tab[j] = k
+        k = k + 2 / len(tab)
+        i = i + 1
+        j = j - 1
+    if i == j:
+        tab[i] = 1
 
 
 def init():
-    pa=pya.PyAudio()
-    sIn=pa.open(format=pya.paInt16, channels=1, rate=RATE, input=True, frames_per_buffer=CHUNK)
+    pya = pyaudio.PyAudio()
     pygame.init()
+    stream = pya.open(format=pyaudio.paInt16, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+    max_y = 2.0 ** (pya.get_sample_size(FORMAT) * 8 - 1)
     screen = pygame.display.set_mode([WIDTH, HEIGHT])
+    screen.fill((0, 0, 0))
+    font = pygame.font.SysFont("comicsansms", 40)
+    text = font.render("Hello, say or play something to see magic!", True, (0, 128, 0))
+    screen.blit(text, ((WIDTH - text.get_width()) // 2, (HEIGHT - text.get_height()) // 2))
+    pygame.display.flip()
+    time.sleep(3)
     surf = pygame.Surface(screen.get_size(), 0, screen)
+    surf.fill(pygame.Color("black"))
     screen.blit(surf, (0, 0))
     random.seed()
     circles = []
     factors = []
     
-    return pa, sIn, screen, surf, circles, factors    
-	
-
-def clean(pa, sIn):
-	sIn.stop_stream()
-	sIn.close()
-	pa.terminate()
-	
-	
-def pitch(signal):
-    crossing = [math.copysign(1.0, s) for s in signal]
-    index = find(np.diff(crossing))
-    return int(round(len(index) *RATE /(2*np.prod(len(signal)))))
+    return pya, stream, max_y, screen, surf, circles, factors, font
 
 
-def getcolor(freq):
-    if 668 <= freq:
-        return (176, 9, 176)
-    elif 631 <= freq:
-        return (21, 101, 176)
-    elif 606 <= freq:
-        return (57, 219, 212)
-    elif 526 <= freq:
-        return (43, 240, 20)
-    elif 508 <= freq:
-        return (255, 243, 16)
-    elif 484 <= freq:
-        return (255, 171, 12)
-    elif 200 <= freq:
-        return (255, 27, 5)
-    else:
-        return (232,232,212)
-        
-    
-def loop(sIn, screen, surf, circles, factors):
+def close(pya, stream):
+    screen.fill((0, 0, 0))
+    screen.blit(text, ((WIDTH - text.get_width()) // 2, (HEIGHT - text.get_height()) // 2))
+    pygame.display.flip()
+    stream.stop_stream()
+    stream.close()
+    pya.terminate()
+    time.sleep(1)
+    pygame.quit()
+    sys.exit()
+
+
+def loop(surf, screen, circles, factors, max_y):
     surf.fill(pygame.Color("black"))
-    screen.blit(surf, (0,0))
-    
-    data = np.fromstring(sIn.read(CHUNK, exception_on_overflow=False),dtype=np.int16)
-    freq = pitch(data)
-    peak = np.average(np.abs(data))*2
-    color = pygame.Color(getcolor(freq)[0], getcolor(freq)[1], getcolor(freq)[2])
-    
-    if (len(circles) >= LIMIT):
+    screen.blit(surf, (0, 0))
+    raw_data = stream.read(CHUNK)
+    data = np.fromstring(raw_data, dtype=np.int16)
+    peak = np.average(np.abs(data)) * 2
+    c = int(get_freq(raw_data, max_y))
+    col = pygame.Color(get_color(c)[0], get_color(c)[1], get_color(c)[2])
+    if len(circles) >= LIMIT:
         circles.pop(0)
-        
-    circles.append([screen, color, (surf.get_width()/2, surf.get_height()/2), int(500*abs(peak)/2**15)])
+    else:
+        factors.append(0)
+        update_factors(factors)
+    circles.append(
+        [screen, col, (int(surf.get_width() / 2), int(surf.get_height() / 2)), int(CONSTANCE * abs(peak) / 2 ** 16)])
+
     surfaces = []
     for i in range(len(circles)):
         s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        circles[i][1].a = 255 * i/len(circles)
-        pygame.draw.circle(s, circles[i][1],circles[i][2], circles[i][3], 1)
-        
+        pygame.draw.circle(s, circles[i][1], circles[i][2], int(circles[i][3] * factors[i]),
+                           int(min(circles[i][3] * factors[i], 1)))
         surfaces.append(s)
 
     for i in range(len(surfaces)):
-        screen.blit(surfaces[i], (0,0))
+        screen.blit(surfaces[i], (0, 0))
 
     pygame.display.flip()
-    bars="#"*int(50*peak/2**15)
 
 
 if __name__ == "__main__":
-    #init
-    pa, sIn, screen, surf, circles, factors = init()
+    pya, stream, max_y, screen, surf, circles, factors, font = init()
+    text = font.render("See you again!", True, (0, 128, 0))
 
-    #read, process and visualize
-    while True:
-        loop(sIn, screen, surf, circles, factors)
-
-    #clean
-    clean(pa, sIn)
-    
+    while (1):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                close(pya, stream)
+        loop(surf, screen, circles, factors, max_y)
