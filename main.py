@@ -14,7 +14,7 @@ SAMPLE_SIZE = 2
 nFFT = 512
 WIDTH = 960
 HEIGHT = 720
-LIMIT = 30
+LIMIT = 11
 CHANNELS = 1
 CONSTANCE = 700
 
@@ -40,27 +40,33 @@ def get_color(freq):
 
 def get_freq(signal, max_y):
     y = np.array(struct.unpack("%dh" % (len(signal) / SAMPLE_SIZE), signal)) / max_y
-    y_L = y[::2]
-    y_R = y[1::2]
+    
+    if (CHANNELS == 2):
+        y_L = y[::2]
+        y_R = y[1::2]
+        Y_L = np.fft.fft(y_L, nFFT)
+        Y_R = np.fft.fft(y_R, nFFT)
 
-    Y_L = np.fft.fft(y_L, nFFT)
-    Y_R = np.fft.fft(y_R, nFFT)
-
-    Y = abs(np.hstack((Y_L[int(-nFFT / 2):-1], Y_R[:int(nFFT / 2)])))
-    avg_freq = 0.0
-    divisor = 0.0
-    for x in range(len(Y_L)):
-        avg_freq += abs(Y_L[x] * (RATE / 2) * x / len(Y_L))
-        divisor += abs(Y_L[x])
-
-    for x in range(len(Y_R)):
-        avg_freq += abs(Y_R[x] * (RATE / 2) * x / len(Y_R))
-        divisor += abs(Y_R[x])
-
-    return (RATE / 2.0) * (abs(np.argmax(Y) - len(Y) / 2.0)) / (len(Y) / 2.0)
-
-
+        Y = abs(np.hstack((Y_L[int(-nFFT / 2):-1], Y_R[:int(nFFT / 2)])))
+        
+        return (RATE / 2.0) * (abs(np.argmax(Y) - len(Y) / 2.0)) / (len(Y) / 2.0)  
+            
+    else:
+        Y = np.fft.fft(y, nFFT)
+        Y = abs(Y)
+        
+    
+        print ((RATE / 2.0) * np.argmax(Y) / len(Y))
+        
+        return (RATE / 2.0) * np.argmax(Y) / len(Y)
+        
+        
 def update_factors(tab):
+    for i in range(len(tab)):
+        tab[i] = (1.0 * i) / len(tab)
+
+
+def update_factors1(tab):
     i = 0
     k = 0
     j = len(tab) - 1
@@ -110,7 +116,7 @@ def close(pya, stream):
 def loop(surf, screen, circles, factors, max_y):
     surf.fill(pygame.Color("black"))
     screen.blit(surf, (0, 0))
-    raw_data = stream.read(CHUNK)
+    raw_data = stream.read(CHUNK, exception_on_overflow=False)
     data = np.fromstring(raw_data, dtype=np.int16)
     peak = np.average(np.abs(data)) * 2
     c = int(get_freq(raw_data, max_y))
@@ -120,12 +126,14 @@ def loop(surf, screen, circles, factors, max_y):
     else:
         factors.append(0)
         update_factors(factors)
+    
     circles.append(
         [screen, col, (int(surf.get_width() / 2), int(surf.get_height() / 2)), int(CONSTANCE * abs(peak) / 2 ** 16)])
 
     surfaces = []
     for i in range(len(circles)):
         s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        circles[i][1].a = int(255 * factors[i])
         pygame.draw.circle(s, circles[i][1], circles[i][2], int(circles[i][3] * factors[i]),
                            int(min(circles[i][3] * factors[i], 1)))
         surfaces.append(s)
@@ -141,7 +149,7 @@ if __name__ == "__main__":
     text = font.render("See you again!", True, (0, 128, 0))
 
     while (1):
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                close(pya, stream)
+        # for event in pygame.event.get():
+          #   if event.type == pygame.QUIT:
+            #     close(pya, stream)
         loop(surf, screen, circles, factors, max_y)
