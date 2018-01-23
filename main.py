@@ -18,65 +18,28 @@ LIMIT = 11
 CHANNELS = 1
 CONSTANCE = 700
 
-
-def get_color(freq):
-    if 700 <= freq:
-        return (176, 9, 176)
-    elif 600 <= freq:
-        return (21, 101, 176)
-    elif 500 <= freq:
-        return (57, 219, 212)
-    elif 400 <= freq:
-        return (43, 240, 20)
-    elif 300 <= freq:
-        return (255, 243, 16)
-    elif 200 <= freq:
-        return (255, 171, 12)
-    elif 100 <= freq:
-        return (255, 27, 5)
-    else:
-        return (232, 232, 212)
+COLORS = [(232, 232, 212), (176, 9, 176), (21, 101, 176), (57, 219, 212), (43, 240, 20), (255, 243, 16), (255, 171, 12), (255, 27, 5)]
 
 
 def get_freq(signal, max_y):
     y = np.array(struct.unpack("%dh" % (len(signal) / SAMPLE_SIZE), signal)) / max_y
     
-    if (CHANNELS == 2):
+    if (CHANNELS == 2): #e.g. PC
         y_L = y[::2]
         y_R = y[1::2]
         Y_L = np.fft.fft(y_L, nFFT)
         Y_R = np.fft.fft(y_R, nFFT)
-
         Y = abs(np.hstack((Y_L[int(-nFFT / 2):-1], Y_R[:int(nFFT / 2)])))
-        
-        return (RATE / 2.0) * (abs(np.argmax(Y) - len(Y) / 2.0)) / (len(Y) / 2.0)  
-            
-    else:
+        return (RATE / 2.0) * (abs(np.argmax(Y) - len(Y) / 2.0)) / (len(Y) / 2.0)   
+    else: #e.g. RPi3
         Y = np.fft.fft(y, nFFT)
         Y = abs(Y)
-        
-    
-        print ((RATE / 2.0) * np.argmax(Y) / len(Y))
-        
         return (RATE / 2.0) * np.argmax(Y) / len(Y)
         
         
 def update_factors(tab):
     for i in range(len(tab)):
         tab[i] = (1.0 * i) / len(tab)
-
-
-def update_factors1(tab):
-    i = 0
-    k = 0
-    j = len(tab) - 1
-    while i < j:
-        tab[i] = tab[j] = k
-        k = k + 2 / len(tab)
-        i = i + 1
-        j = j - 1
-    if i == j:
-        tab[i] = 1
 
 
 def init():
@@ -120,7 +83,8 @@ def loop(surf, screen, circles, factors, max_y):
     data = np.fromstring(raw_data, dtype=np.int16)
     peak = np.average(np.abs(data)) * 2
     c = int(get_freq(raw_data, max_y))
-    col = pygame.Color(get_color(c)[0], get_color(c)[1], get_color(c)[2])
+    co = COLORS[c/100]
+    col = pygame.Color(co[0], co[1], co[2])
     if len(circles) >= LIMIT:
         circles.pop(0)
     else:
@@ -149,7 +113,7 @@ if __name__ == "__main__":
     text = font.render("See you again!", True, (0, 128, 0))
 
     while (1):
-        # for event in pygame.event.get():
-          #   if event.type == pygame.QUIT:
-            #     close(pya, stream)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                close(pya, stream)
         loop(surf, screen, circles, factors, max_y)
