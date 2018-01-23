@@ -83,7 +83,7 @@ def loop(surf, screen, circles, factors, max_y):
     data = np.fromstring(raw_data, dtype=np.int16)
     peak = np.average(np.abs(data)) * 2
     c = int(get_freq(raw_data, max_y))
-    co = COLORS[c/100]
+    co = COLORS[min(c//100, len(COLORS)-1)]
     col = pygame.Color(co[0], co[1], co[2])
     if len(circles) >= LIMIT:
         circles.pop(0)
